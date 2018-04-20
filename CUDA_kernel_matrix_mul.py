@@ -1,4 +1,18 @@
 from numba import cuda, float32
+from matrix import gene_matrix
+from timer import timer
+
+
+@cuda.jit # this method just use one kernel in CPU
+def naive_mul(A, B, C):
+    # get the dim info from A and B.
+    m, p = A.shape
+    n = B.shape[1]
+
+    for i in range(0, m):
+        for j in range(0, n):
+            for k in range(0, p):
+                C[i, j] += A[i, k] * B[k, j]
 
 
 @cuda.jit
@@ -6,23 +20,23 @@ def matmul(A, B, C):
     """Perform square matrix multiplication of C = A * B
     """
     i, j = cuda.grid(2)
+    print(i,j)
     if i < C.shape[0] and j < C.shape[1]:
         tmp = 0.
         for k in range(A.shape[1]):
             tmp += A[i, k] * B[k, j]
-        C[i, j] = tmp
-
-    return C
+            C[i, j] = tmp
 
 
 # Controls threads per block and shared memory usage.
 # The computation will be done on blocks of TPBxTPB elements.
-TPB = 16
+
 
 @cuda.jit
 def fast_matmul(A, B, C):
     # Define an array in the shared memory
     # The size and type of the arrays must be known at compile time
+    TPB = 16
     sA = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
     sB = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
 
@@ -57,3 +71,22 @@ def fast_matmul(A, B, C):
     C[x, y] = tmp
 
     return C
+
+
+if __name__ == "__main__":
+
+    matrix_size = 10
+    A = gene_matrix(row=matrix_size, col=matrix_size, show=False)
+    B = gene_matrix(row=matrix_size, col=matrix_size, show=False)
+    C = gene_matrix(row=matrix_size, col=matrix_size, rand=False, show=False)
+    C = gene_matrix(row=matrix_size, col=matrix_size, rand=False, show=False)
+
+    timer = timer()
+    print("running...")
+    timer.start()
+    # naive_mul(A, B, C)
+    matmul(A, B, C)
+    # result = fast_matmul(A, B, C)
+    timer.stop()
+
+    print(C)

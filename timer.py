@@ -10,13 +10,13 @@ class timer:
     # 计时开始
     def start(self):
         self.start_time = t.time()
-        print("计时开始", self.start_time)
+        #print("计时开始", self.start_time)
 
     # 计时结束
     def stop(self):
         self.stop_time = t.time()
         self.__calc_lasted_time()
-        print("计时结束", self.stop_time)
+        #print("计时结束", self.stop_time)
 
     # 计算持续时间，内部方法
     def __calc_lasted_time(self):
