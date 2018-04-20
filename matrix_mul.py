@@ -6,8 +6,9 @@ import numpy as np
 from matrix import gene_matrix
 from timer import timer
 from numba import jit
+from CUDA_kernel_matrix_mul import matmul, fast_matmul
 
-@jit
+@jit # this method just use one kernel in CPU
 def matrix_mul(A, B):
     # get the dim info from A and B.
     m, p = A.shape
@@ -22,17 +23,20 @@ def matrix_mul(A, B):
                 C[i, j] += A[i, k] * B[k, j]
     return C
 
+
 if __name__ == "__main__":
 
     A = gene_matrix(row=1024, col=1024, show=False)
-    B = gene_matrix(row=1024, col=1024)
+    B = gene_matrix(row=1024, col=1024, show=False)
+    C = gene_matrix(row=1024, col=1024, rand=False, show=False)
     # A = np.random.randint(0, 10, (5, 3))
     # B = np.random.randint(0, 10, (3, 4))
 
     timer = timer()
     print("running...")
     timer.start()
-    C = matrix_mul(A, B)
+    # C = matrix_mul(A, B)
+    #C = fast_matmul(A, B, C)
     timer.stop()
 
-    print(C)
+    # print(C)
