@@ -1,73 +1,93 @@
-from __future__ import print_function
-
-from timeit import default_timer as time
-
+from numba import cuda
+from mat_gen import gene_matrix
+from mat_mul import matmul, faster_matmul, cuda_matmul, faster_cuda_matmul
+from timer import timer as t
 import numpy as np
 
-from numba import cuda
+"""
+    for analysis propose, i designed all four algorithms running in the same RAM / GPU memory space.
+    for the memory limit and i can't find the right way to release the GPU-memory in the document, so
+    i need to choose the matrix size to a small scale.
+"""
+
+block_per_grid = 8
+thread_per_block = 32
 
 
+if __name__ == "__main__":
 
-bpg = 10
-tpb = 32
-n = bpg * tpb
+    mat_size = block_per_grid * thread_per_block
 
+    # init matrix
+    A = gene_matrix(mat_size, mat_size, rand=True, show=False)
+    B = gene_matrix(mat_size, mat_size, rand=True, show=False)
+    C_1 = gene_matrix(mat_size, mat_size, rand=False, show=False)
+    C_2 = gene_matrix(mat_size, mat_size, rand=False, show=False)
+    C_3 = gene_matrix(mat_size, mat_size, rand=False, show=False)
+    C_4 = gene_matrix(mat_size, mat_size, rand=False, show=False)
 
-@cuda.jit('(float32[:,:], float32[:,:], float32[:,:])')
-def cu_square_matrix_mul(A, B, C):
-    tx = cuda.threadIdx.x
-    ty = cuda.threadIdx.y
-    bx = cuda.blockIdx.x
-    by = cuda.blockIdx.y
-    bw = cuda.blockDim.x
-    bh = cuda.blockDim.y
+    print("matrix size : %d x %d" % (mat_size, mat_size))
 
-    x = tx + bx * bw
-    y = ty + by * bh
+    # init timer
+    cpu_timer = t()
+    faster_cpu_timer = t()
+    gpu_timer = t()
+    faster_gpu_timer = t()
 
-    if x >= n or y >= n:
-        return
+    # CPU compute
+    cpu_timer.start()
+    matmul(A, B, C_1)
+    t_cpu = cpu_timer.stop()
 
-    C[y, x] = 0
-    for i in range(n):
-        C[y, x] += A[y, i] * B[i, x]
+    # faster CPU compute
+    faster_cpu_timer.start()
+    faster_matmul(A, B, C_2)
+    t_faster_cpu = faster_cpu_timer.stop()
 
+    # GPU compute
+    gpu_timer.start()
+    stream = cuda.stream()
+    with stream.auto_synchronize():
+        # 将数据传入GPU
+        dA = cuda.to_device(A, stream)
+        dB = cuda.to_device(B, stream)
+        dC_3 = cuda.to_device(C_3, stream)
+        cuda_matmul[(block_per_grid, block_per_grid), (thread_per_block, thread_per_block), stream](dA, dB, dC_3)
+        # 将结果取回CPU
+        dC_3.to_host(stream)
+    t_gpu = gpu_timer.stop()
 
-A = np.array(np.random.random((n, n)), dtype=np.float32)
-B = np.array(np.random.random((n, n)), dtype=np.float32)
-C = np.empty_like(A)
+    # faster GPU compute
+    faster_gpu_timer.start()
+    stream = cuda.stream()
+    with stream.auto_synchronize():
+        # 将数据传入GPU
+        dA = cuda.to_device(A, stream)
+        dB = cuda.to_device(B, stream)
+        dC_4 = cuda.to_device(C_4, stream)
+        # faster_cuda_matmul[(block_per_grid, block_per_grid), (thread_per_block, thread_per_block), stream](dA, dB, dC_4)
+        # 将结果取回CPU
+        dC_4.to_host(stream)
+    t_faster_gpu = faster_gpu_timer.stop()
 
-print("N = %d x %d" % (n, n))
+    # Check result
+    assert np.allclose(C_1, C_2, C_3, C_4)
 
-s = time()
-stream = cuda.stream()
-with stream.auto_synchronize():
-    dA = cuda.to_device(A, stream)
-    dB = cuda.to_device(B, stream)
-    dC = cuda.to_device(C, stream)
-    cu_square_matrix_mul[(bpg, bpg), (tpb, tpb), stream](dA, dB, dC)
-    dC.to_host(stream)
-
-e = time()
-tcuda = e - s
-
-# Host compute
-Amat = np.matrix(A)
-Bmat = np.matrix(B)
-
-s = time()
-Cans = Amat * Bmat
-e = time()
-tcpu = e - s
-
-# Check result
-assert np.allclose(C, Cans)
-#relerr = lambda got, gold: abs(got - gold)/gold
-#for y in range(n):
-#    for x in range(n):
-#        err = relerr(C[y, x], Cans[y, x])
-#        assert err < 1e-5, (x, y, err)
-
-print('cpu:  %f' % tcpu)
-print('cuda: %f' % tcuda)
-print('cuda speedup: %.2fx' % (tcpu / tcuda))
+    result = '''
+        default cpu mul: {:f} s, speedup: {:.2f}x,
+        faster  cpu mul: {:f} s, speedup: {:.2f}x,
+        default gpu mul: {:f} s, speedup: {:.2f}x,
+        faster  gpu mul: {:f} s, speedup: {:.2f}x,
+    
+    '''.format(
+        t_cpu, t_cpu / t_cpu,
+        t_faster_cpu, t_cpu / t_faster_cpu,
+        t_gpu, t_cpu / t_gpu,
+        t_faster_gpu, t_cpu / t_faster_gpu,
+    )
+    print(result)
+    #print('default  cpu: %f s, speedup: %.2fx' % t_cpu %(t_cpu / t_cpu))
+    #print('faster   cpu:  %f s' % tcpu)
+    #print('default cuda: %f s' % tcuda)
+    #print('faster  cuda: %f s' % tcuda)
+    #print('cuda speedup: %.2fx' % (tcpu / tcuda))

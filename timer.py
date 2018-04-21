@@ -15,7 +15,7 @@ class timer:
     # 计时结束
     def stop(self):
         self.stop_time = t.time()
-        self.__calc_lasted_time()
+        return self.__calc_lasted_time()
         #print("计时结束", self.stop_time)
 
     # 计算持续时间，内部方法
@@ -23,7 +23,8 @@ class timer:
         self.lasted = round(self.stop_time - self.start_time, 6)
         self.prompt = "time cost: "
         self.prompt = self.prompt + str(self.lasted) + 's'
-        print(self.prompt)
+        # print(self.prompt)
+        return self.lasted
 
 
 if __name__ == '__main__':
