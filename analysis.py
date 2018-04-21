@@ -1,18 +1,17 @@
+"""
+# for analysis propose, i designed all four algorithms running in the same RAM / GPU memory space.
+# for the memory limit and i can't find the right way to release the GPU-memory in the document, so
+# i need to choose the matrix size to a small scale.
+"""
 from numba import cuda
 from mat_gen import gene_matrix
-from mat_mul import matmul, faster_matmul, cuda_matmul, faster_cuda_matmul
+from mat_mul import matmul, faster_matmul, faster_matmul_parallel, cuda_matmul, faster_cuda_matmul
 from timer import timer as t
 import numpy as np
 
-"""
-    for analysis propose, i designed all four algorithms running in the same RAM / GPU memory space.
-    for the memory limit and i can't find the right way to release the GPU-memory in the document, so
-    i need to choose the matrix size to a small scale.
-"""
 
-block_per_grid = 8
-thread_per_block = 32
-
+thread_per_block = 16
+block_per_grid = 32
 
 if __name__ == "__main__":
 
@@ -41,7 +40,7 @@ if __name__ == "__main__":
 
     # faster CPU compute
     faster_cpu_timer.start()
-    faster_matmul(A, B, C_2)
+    faster_matmul_parallel(A, B, C_2)
     t_faster_cpu = faster_cpu_timer.stop()
 
     # GPU compute
@@ -65,14 +64,15 @@ if __name__ == "__main__":
         dA = cuda.to_device(A, stream)
         dB = cuda.to_device(B, stream)
         dC_4 = cuda.to_device(C_4, stream)
-        # faster_cuda_matmul[(block_per_grid, block_per_grid), (thread_per_block, thread_per_block), stream](dA, dB, dC_4)
+        faster_cuda_matmul[(block_per_grid, block_per_grid), (thread_per_block, thread_per_block), stream](dA, dB, dC_4)
         # 将结果取回CPU
         dC_4.to_host(stream)
     t_faster_gpu = faster_gpu_timer.stop()
 
     # Check result
-    assert np.allclose(C_1, C_2, C_3, C_4)
+    assert np.allclose(C_1, C_4)
 
+    # output the result and cal the speedup over default cpu method.
     result = '''
         default cpu mul: {:f} s, speedup: {:.2f}x,
         faster  cpu mul: {:f} s, speedup: {:.2f}x,
@@ -86,8 +86,4 @@ if __name__ == "__main__":
         t_faster_gpu, t_cpu / t_faster_gpu,
     )
     print(result)
-    #print('default  cpu: %f s, speedup: %.2fx' % t_cpu %(t_cpu / t_cpu))
-    #print('faster   cpu:  %f s' % tcpu)
-    #print('default cuda: %f s' % tcuda)
-    #print('faster  cuda: %f s' % tcuda)
-    #print('cuda speedup: %.2fx' % (tcpu / tcuda))
+

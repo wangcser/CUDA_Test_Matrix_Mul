@@ -1,15 +1,17 @@
+"""
+# this file defined 6 types of matrix multiple implement, in practice
+# only use 4 of them.
+"""
 from numba import cuda, jit, float32
-import numpy as np
 
 
 def matmul(A, B, C):
     """
-    host: this func run in cpu with 1 thread.
+    host: cpu with 1 thread.
     func: use naive element-wise mul cal the result.
     """
     m, p = A.shape
     n = B.shape[1]
-
     for i in range(0, m):
         for j in range(0, n):
             for k in range(0, p):
@@ -17,29 +19,27 @@ def matmul(A, B, C):
 
 
 @cuda.jit
-def fast_matmul(A, B, C):
-    """
-    host: this func run in cpu with 1 thread.
-    func: use naive element-wise mul cal the result.
-    """
-    m, p = A.shape
-    n = B.shape[1]
-
-    for i in range(0, m):
-        for j in range(0, n):
-            for k in range(0, p):
-                C[i, j] += A[i, k] * B[k, j]
-
-
-@jit  # (nogil=True, parallel=True)
 def faster_matmul(A, B, C):
     """
-    host: this func run in cpu with 6 thread.
+    host: cpu with 1 thread, compile optimise.
     func: use naive element-wise mul cal the result.
     """
     m, p = A.shape
     n = B.shape[1]
+    for i in range(0, m):
+        for j in range(0, n):
+            for k in range(0, p):
+                C[i, j] += A[i, k] * B[k, j]
 
+
+@jit(nogil=True, parallel=True)
+def faster_matmul_parallel(A, B, C):
+    """
+    host: cpu with 6 thread, compile optimise.
+    func: use naive element-wise mul cal the result.
+    """
+    m, p = A.shape
+    n = B.shape[1]
     for i in range(0, m):
         for j in range(0, n):
             for k in range(0, p):
@@ -47,7 +47,21 @@ def faster_matmul(A, B, C):
 
 
 @cuda.jit
-def scuda_matmul(A, B, C):
+def cuda_matmul(A, B, C):
+    """
+    host: gpu
+    func: Perform square matrix multiplication of C = A * B
+    """
+    i, j = cuda.grid(2)
+    if i < C.shape[0] and j < C.shape[1]:
+        tmp = 0.
+        for k in range(A.shape[1]):
+            tmp += A[i, k] * B[k, j]
+            C[i, j] = tmp
+
+
+@cuda.jit
+def cuda_matmul_2(A, B, C):
     """
     host: gpu
     func: each thread cal a result in C[i,j] with element-wise mul.
@@ -75,19 +89,6 @@ def scuda_matmul(A, B, C):
     for i in range(mat_size):
         C[y, x] += A[y, i] * B[i, x]
 
-    cuda.close()
-
-
-@cuda.jit
-def cuda_matmul(A, B, C):
-    """Perform square matrix multiplication of C = A * B
-    """
-    i, j = cuda.grid(2)
-    if i < C.shape[0] and j < C.shape[1]:
-        tmp = 0.
-        for k in range(A.shape[1]):
-            tmp += A[i, k] * B[k, j]
-            C[i, j] = tmp
 
 @cuda.jit('(float32[:,:], float32[:,:], float32[:,:])')
 def faster_cuda_matmul(A, B, C):
@@ -99,8 +100,8 @@ def faster_cuda_matmul(A, B, C):
             Define an array in the shared memory
             The size and type of the arrays must be known at compile time
     """
-    # define: thread_per_block
-    TPB = 8
+    # define: thread_per_block, when modified in analysis, you must modify this TPB
+    TPB = 16
     sA = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
     sB = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
 
@@ -134,5 +135,4 @@ def faster_cuda_matmul(A, B, C):
 
         # Wait until all threads finish computing
         cuda.syncthreads()
-
         C[x, y] = tmp

@@ -2,21 +2,28 @@ import time as t
 
 
 class timer:
+    """
+    class:  定义时间，用于计时
+    param: 开始时间，结束时间
+    func : __init__ 初始化时间类
+           start 开始计时
+           stop 结束计时
+           __calc_lasted_time 计算持续时间
 
-    start_time = 0
-    stop_time = 0
-    tt = {}
+    """
+    def __init__(self):
+        self.start_time = 0
+        self.stop_time = 0
+        self.lasted = 0
 
     # 计时开始
     def start(self):
         self.start_time = t.time()
-        #print("计时开始", self.start_time)
 
     # 计时结束
     def stop(self):
         self.stop_time = t.time()
         return self.__calc_lasted_time()
-        #print("计时结束", self.stop_time)
 
     # 计算持续时间，内部方法
     def __calc_lasted_time(self):
